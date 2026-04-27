@@ -265,12 +265,10 @@ class App(tk.Tk):
             right_canvas.itemconfigure(right_window, width=right_canvas.winfo_width())
 
         def _on_right_mousewheel(event: tk.Event) -> None:
-            # Windows / macOS
             if hasattr(event, "delta") and event.delta:
                 step = -1 if event.delta > 0 else 1
                 right_canvas.yview_scroll(step, "units")
                 return
-            # Linux (Button-4 / Button-5)
             if getattr(event, "num", None) == 4:
                 right_canvas.yview_scroll(-1, "units")
             elif getattr(event, "num", None) == 5:
@@ -456,7 +454,6 @@ class App(tk.Tk):
         vals = self.tree.item(target_iid, "values")
         if not vals:
             return
-        # highlight only valid drop targets (groups)
         if vals[0] == "student_group":
             self.tree.selection_set(target_iid)
         elif vals[0] == "student":
@@ -479,7 +476,6 @@ class App(tk.Tk):
         if src_vals[0] != "student":
             return
 
-        # Resolve drop target to a student_group node
         target_iid = raw_target
         tgt_vals = self.tree.item(target_iid, "values")
         if not tgt_vals:
@@ -506,13 +502,9 @@ class App(tk.Tk):
         self.log("MOVE", "Student", student_id, f"Перенос из группы {old_group_id} в {new_group_id}")
         self.conn.commit()
 
-        # If target has dummy, remove it and move student into target
         if self._has_only_dummy(target_iid):
             self._clear_children(target_iid)
         self.tree.move(source_iid, target_iid, tk.END)
-
-        # Remove from old parent if needed
-        # (nothing else needed; Treeview move already updated UI)
 
 
     def _on_select(self, _event: tk.Event) -> None:
@@ -585,9 +577,7 @@ class App(tk.Tk):
                 self.conn.commit()
                 dep_iid = self.node_index.get(("department", entity_id))
                 if dep_iid:
-                    # If groups loaded, insert into tree; otherwise ensure plus sign
                     if self._has_only_dummy(dep_iid):
-                        # keep dummy; actual load later
                         return
                     if len(self.tree.get_children(dep_iid)) == 0:
                         self._dummy_child(dep_iid)
