@@ -245,19 +245,64 @@ class App(tk.Tk):
         y_scroll.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=y_scroll.set)
 
-        right = ttk.LabelFrame(content, style="Panel.TLabelframe", padding=14)
+        right = ttk.LabelFrame(content, style="Panel.TLabelframe", padding=8)
         right.grid(row=0, column=1, sticky="nsew")
+        right.rowconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
-        ttk.Label(right, text="Управление курсами", style="RightTitle.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(right, text="Выбрано:", style="PickedTitle.TLabel", padding=(8, 8)).grid(row=1, column=0, sticky="ew", pady=(16, 0))
-        ttk.Label(right, textvariable=self.selected_info, style="PickedInfo.TLabel", padding=(8, 8), wraplength=340).grid(row=2, column=0, sticky="ew")
-        self.add_btn = ttk.Button(right, text="➕ Добавить", style="Action.TButton", command=self.add_entity)
+
+        right_canvas = tk.Canvas(right, highlightthickness=0, bg="#f1f1f1")
+        right_canvas.grid(row=0, column=0, sticky="nsew")
+        right_scroll = ttk.Scrollbar(right, orient=tk.VERTICAL, command=right_canvas.yview)
+        right_scroll.grid(row=0, column=1, sticky="ns")
+        right_canvas.configure(yscrollcommand=right_scroll.set)
+
+        right_content = ttk.Frame(right_canvas, padding=6)
+        right_content.columnconfigure(0, weight=1)
+        right_window = right_canvas.create_window((0, 0), window=right_content, anchor="nw")
+
+        def _sync_right_panel(_event: tk.Event) -> None:
+            right_canvas.configure(scrollregion=right_canvas.bbox("all"))
+            right_canvas.itemconfigure(right_window, width=right_canvas.winfo_width())
+
+        def _on_right_mousewheel(event: tk.Event) -> None:
+            # Windows / macOS
+            if hasattr(event, "delta") and event.delta:
+                step = -1 if event.delta > 0 else 1
+                right_canvas.yview_scroll(step, "units")
+                return
+            # Linux (Button-4 / Button-5)
+            if getattr(event, "num", None) == 4:
+                right_canvas.yview_scroll(-1, "units")
+            elif getattr(event, "num", None) == 5:
+                right_canvas.yview_scroll(1, "units")
+
+        def _bind_right_wheel(_event: tk.Event) -> None:
+            right_canvas.bind_all("<MouseWheel>", _on_right_mousewheel)
+            right_canvas.bind_all("<Button-4>", _on_right_mousewheel)
+            right_canvas.bind_all("<Button-5>", _on_right_mousewheel)
+
+        def _unbind_right_wheel(_event: tk.Event) -> None:
+            right_canvas.unbind_all("<MouseWheel>")
+            right_canvas.unbind_all("<Button-4>")
+            right_canvas.unbind_all("<Button-5>")
+
+        right_content.bind("<Configure>", _sync_right_panel)
+        right_canvas.bind("<Configure>", _sync_right_panel)
+        right_canvas.bind("<Enter>", _bind_right_wheel)
+        right_canvas.bind("<Leave>", _unbind_right_wheel)
+        right_content.bind("<Enter>", _bind_right_wheel)
+        right_content.bind("<Leave>", _unbind_right_wheel)
+
+        ttk.Label(right_content, text="Управление курсами", style="RightTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(right_content, text="Выбрано:", style="PickedTitle.TLabel", padding=(8, 8)).grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        ttk.Label(right_content, textvariable=self.selected_info, style="PickedInfo.TLabel", padding=(8, 8), wraplength=340).grid(row=2, column=0, sticky="ew")
+        self.add_btn = ttk.Button(right_content, text="➕ Добавить", style="Action.TButton", command=self.add_entity)
         self.add_btn.grid(row=3, column=0, sticky="ew", pady=(18, 10))
-        self.edit_btn = ttk.Button(right, text="✎ Редактировать", style="Action.TButton", command=self.edit_entity)
+        self.edit_btn = ttk.Button(right_content, text="✎ Редактировать", style="Action.TButton", command=self.edit_entity)
         self.edit_btn.grid(row=4, column=0, sticky="ew", pady=10)
-        self.del_btn = ttk.Button(right, text="✕ Удалить", style="Action.TButton", command=self.delete_entity)
+        self.del_btn = ttk.Button(right_content, text="✕ Удалить", style="Action.TButton", command=self.delete_entity)
         self.del_btn.grid(row=5, column=0, sticky="ew", pady=10)
-        bottom = ttk.Frame(right)
+        bottom = ttk.Frame(right_content)
         bottom.grid(row=6, column=0, sticky="ew", pady=(18, 0))
         bottom.columnconfigure(0, weight=1)
         ttk.Label(
@@ -384,6 +429,11 @@ class App(tk.Tk):
         iid = self.tree.identify_row(event.y)
         if iid:
             self.tree.selection_set(iid)
+        selected = self._selected()
+        if selected and selected[0] == "student":
+            self.context_menu.entryconfigure("Добавить", state="disabled")
+        else:
+            self.context_menu.entryconfigure("Добавить", state="normal")
         self.context_menu.tk_popup(event.x_root, event.y_root)
 
     def _on_drag_start(self, event: tk.Event) -> None:
@@ -497,7 +547,13 @@ class App(tk.Tk):
             return
         self.edit_btn.state(["!disabled"])
         self.del_btn.state(["!disabled"])
-        self.add_btn.configure(text="➕ Добавить группу" if selected[0] == "department" else ("➕ Добавить студента" if selected[0] == "student_group" else "➕ Добавить кафедру"))
+        if selected[0] == "department":
+            self.add_btn.configure(text="➕ Добавить группу")
+        elif selected[0] == "student_group":
+            self.add_btn.configure(text="➕ Добавить студента")
+        else:
+            self.add_btn.configure(text="➕ Добавление недоступно")
+            self.add_btn.state(["disabled"])
 
     def add_entity(self) -> None:
         selected = self._selected()
